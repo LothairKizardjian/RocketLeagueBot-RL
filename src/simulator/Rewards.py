@@ -19,7 +19,7 @@ class MyReward(RewardFunction):
         reward = 0
         # reward += FaceBallReward().get_reward(player, state, previous_action)
         # reward += DiffReward(VelocityPlayerToBallReward()).get_reward(player, state, previous_action)
-        reward += LiuDistancePlayerToBallReward().get_reward(player, state, previous_action)
+        reward += 0.01*LiuDistancePlayerToBallReward().get_reward(player, state, previous_action)
         reward += 10*TouchBallReward().get_reward(player, state, previous_action)
 
         return reward

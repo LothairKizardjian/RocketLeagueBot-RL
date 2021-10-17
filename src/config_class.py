@@ -1,5 +1,3 @@
-import ast
-
 class ConfigClass(object):
     def __init__(self, configFile):
 
@@ -26,6 +24,7 @@ class ConfigClass(object):
         self.clip = float(ppo['clip'])
         self.lr_actor = float(ppo['lr_actor'])
         self.lr_critic = float(ppo['lr_critic'])
+        self.nn_number = int(ppo['nn_number'])
         
         ### game
         game = configFile['game']

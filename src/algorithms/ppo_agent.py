@@ -6,6 +6,7 @@ from pathlib import Path
 
 import torch
 import torch.nn as nn
+import numpy as np
 
 class RolloutBuffer:
     def __init__(self):
@@ -30,29 +31,31 @@ class PpoAgent(BaseAgent):
         self.env = env
         self.buffer = RolloutBuffer()
         
+        input_size = env.observation_space.shape[0]        
+        output_size = env.action_space 
+        
         save_dir = self.config.model_dir
         if self.config.env == "LunarLander":
             save_dir += "/LunarLander"
-        if self.config.env == "RocketLeague":
+            output_size = env.action_space.n 
+            
+        elif self.config.env == "RocketLeague":
             save_dir += "/RocketLeague"
+            output_size = env.action_space.shape[0]            
             
         Path(save_dir).mkdir(parents=True, exist_ok=True)
-        self.save_path = save_dir + "/policy.pth"
+        self.save_path = save_dir + "/policy.pth"   
         
-        input_size = env.observation_space.shape[0]
-        output_size = env.action_space.n    
-        
-        self.policy = ActorCritic(input_size, output_size)
+        self.policy = ActorCritic(config, input_size, output_size)
         self.optimizer = Adam([
                         {'params': self.policy.actor.parameters(), 'lr': self.config.lr_actor},
                         {'params': self.policy.critic.parameters(), 'lr': self.config.lr_critic}
                     ])
 
-        self.policy_old = ActorCritic(input_size, output_size)
+        self.policy_old = ActorCritic(config, input_size, output_size)
         self.policy_old.load_state_dict(self.policy.state_dict())
         
         self.MseLoss = nn.MSELoss()
-        
         
     def select_action(self, state):
         with torch.no_grad():
@@ -61,7 +64,13 @@ class PpoAgent(BaseAgent):
         self.buffer.states.append(state)
         self.buffer.actions.append(action)
         self.buffer.logprobs.append(log_probs)
-        return action.item()
+        
+        if self.config.env == "LunarLander":
+            action = action.detach().item()
+        elif self.config.env == "RocketLeague":
+            action = action.numpy()
+            
+        return action
     
     def update_parameters(self):
 
@@ -83,6 +92,8 @@ class PpoAgent(BaseAgent):
         old_actions = torch.squeeze(torch.stack(self.buffer.actions, dim=0)).detach()
         old_logprobs = torch.squeeze(torch.stack(self.buffer.logprobs, dim=0)).detach()
         
+        avg_loss = 0
+        count = 0
         # Optimize policy for K epochs
         for _ in range(self.config.K_epochs):
 
@@ -96,12 +107,17 @@ class PpoAgent(BaseAgent):
             ratios = torch.exp(logprobs - old_logprobs.detach())
 
             # Finding Surrogate Loss
-            advantages = rewards - state_values.detach()   
+            advantages = rewards - state_values.detach()
+            if self.config.env == "RocketLeague":
+                advantages = np.repeat(advantages.unsqueeze(1), repeats=ratios.size(1), axis=1)
+            
             surr1 = ratios * advantages
             surr2 = torch.clamp(ratios, 1-self.config.clip, 1+self.config.clip) * advantages
 
             # final loss of clipped objective PPO
             loss = -torch.min(surr1, surr2) + 0.5*self.MseLoss(state_values, rewards) - 0.01*dist_entropy
+            avg_loss += loss.mean().mean()
+            count += 1
             
             # take gradient step
             self.optimizer.zero_grad()
@@ -113,6 +129,7 @@ class PpoAgent(BaseAgent):
 
         # clear buffer
         self.buffer.clear()
+        return avg_loss/count
     
     def train(self):
         # printing and logging variables
@@ -148,13 +165,15 @@ class PpoAgent(BaseAgent):
     
                 time_step +=1
                 current_ep_reward += reward
+                
+                avg_loss = 0
     
                 # update PPO agent
                 if time_step % self.config.update_timestep == 0:
                     print(flush=True)
                     print("Updating policy",flush=True)
                     print(flush=True)
-                    self.update_parameters()
+                    avg_loss = self.update_parameters()
                     
                 # printing average reward
                 if time_step % self.config.print_freq == 0:
@@ -164,7 +183,7 @@ class PpoAgent(BaseAgent):
                     print_avg_reward = round(print_avg_reward, 2)
     
                     print(flush=True)
-                    print("Episode : {} \t\t Timestep : {} \t\t Average Reward : {}".format(i_episode, time_step, print_avg_reward),flush=True)
+                    print("Episode : {} \t\t Timestep : {} \t\t Average Loss : {} \t\t Average Reward : {}".format(i_episode, time_step, avg_loss, print_avg_reward),flush=True)
                     print(flush=True)
                     
                     print_running_reward = 0

@@ -1,5 +1,4 @@
 import rlgym
-import time
 import gym
 
 from src.simulator import BaseStateSetter, AerialStateSetter, BallTouchedTerminalCondition, CustomObsBuilder, MyReward
@@ -23,13 +22,12 @@ class SimpleBot():
                          reward_fn=MyReward(),
                          obs_builder=CustomObsBuilder())
         
-        if self.config.env == "LunarLander":
+        elif self.config.env == "LunarLander":
             env = gym.make("LunarLander-v2")        
             
         agent = PpoAgent(env, self.config)
         
         if self.mode == "train":
-            print(self.retrain == True)
             if self.retrain != 1:
                 agent.load()
             agent.train()

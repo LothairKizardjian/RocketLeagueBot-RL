@@ -1,42 +1,39 @@
 import rlgym
 import time
-from src.simulator import BaseStateSetter, AerialStateSetter, BallTouchedTerminalCondition, CustomObsBuilder
-from src.algorithms import RandomAgent
-from rlgym.utils.terminal_conditions.common_conditions import TimeoutCondition
-from rlgym.utils.reward_functions.common_rewards.player_ball_rewards import VelocityPlayerToBallReward
+import gym
 
-default_tick_skip = 8
-physics_ticks_per_second = 120
-ep_len_seconds = 20
-
-max_steps = int(round(ep_len_seconds * physics_ticks_per_second / default_tick_skip))
-
-condition1 = TimeoutCondition(max_steps)
-condition2 = BallTouchedTerminalCondition()
+from src.simulator import BaseStateSetter, AerialStateSetter, BallTouchedTerminalCondition, CustomObsBuilder, MyReward
+from src.algorithms import PpoAgent
+from rlgym.utils.terminal_conditions.common_conditions import TimeoutCondition, NoTouchTimeoutCondition
 
 class SimpleBot():
     
-    def run(self):
-        #Make the default rlgym environment
-        env = rlgym.make(state_setter=BaseStateSetter(),
-                         terminal_conditions=[condition1, condition2],
-                         reward_fn=VelocityPlayerToBallReward(),
+    def __init__(self, config, mode="train", retrain=1):
+        self.config = config
+        self.mode = mode
+        self.retrain = retrain
+        self.condition1 = NoTouchTimeoutCondition(self.config.max_steps)
+        self.condition2 = BallTouchedTerminalCondition()
+        self.conditions = [self.condition1]
+    
+    def run(self):        
+        if self.config.env == "RocketLeague":
+            env = rlgym.make(state_setter=BaseStateSetter(),
+                         terminal_conditions=self.conditions,
+                         reward_fn=MyReward(),
                          obs_builder=CustomObsBuilder())
         
-        agent = RandomAgent()
-        
-        while True:
-            obs = env.reset()
-            done = False
-            steps = 0
-            ep_reward = 0
-            t0 = time.time()
-            while not done:
-                actions = agent.get_action(obs)
-                new_obs, reward, done, state = env.step(actions)
-                ep_reward += reward
-                obs = new_obs
-                steps += 1
+        if self.config.env == "LunarLander":
+            env = gym.make("LunarLander-v2")        
             
-        length = time.time() - t0
-        print("Step time: {:1.5f} | Episode time: {:.2f} | Episode Reward: {:.2f}".format(length / steps, length, ep_reward))
+        agent = PpoAgent(env, self.config)
+        
+        if self.mode == "train":
+            print(self.retrain == True)
+            if self.retrain != 1:
+                agent.load()
+            agent.train()
+        elif self.mode == "test":
+            agent.load()
+            agent.test()
+                

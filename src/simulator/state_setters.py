@@ -9,8 +9,8 @@ class BaseStateSetter(StateSetter):
     
     def reset(self, state_wrapper : StateWrapper):
         # set pos and rotation of the car
-        desired_car_pos = [0, -2100, 17]
-        desired_yaw = np.pi/2
+        desired_car_pos = [1000, 0, 17]
+        desired_yaw = np.pi
         
         for car in state_wrapper.cars:
             car.set_pos(*desired_car_pos)

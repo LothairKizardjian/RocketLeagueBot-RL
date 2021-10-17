@@ -11,5 +11,6 @@ class CustomObsBuilder(ObsBuilder):
         obs.append(state.ball.serialize())
         for player in state.players:
             obs.append(player.car_data.serialize())
-        obs.append(state.boost_pads)
+        obs = np.asarray(obs)
+        obs = obs.flatten()
         return obs
